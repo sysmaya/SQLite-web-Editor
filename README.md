@@ -5,7 +5,9 @@
 
 ---
 
-![Web SQLite Editor Logo](sqlite-web-editor.webp)
+<p align="center">
+  <img src="sqlite-web-editor.webp" alt="Web SQLite Editor Logo" width="300">
+</p>
 
 ## 🚀 Overview
 
