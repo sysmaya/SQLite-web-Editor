@@ -1,0 +1,2146 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQLite web editor 100% Javascript client-side</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/clusterize.js/0.18.0/clusterize.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/clusterize.js/0.18.0/clusterize.min.js"></script>
+    <style>
+    .list-group-item { padding: .1rem 1.25rem; }
+    #overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.5);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    #overlay-content {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      max-width: 860px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    .clusterize-viewport { max-height: 55vh; }
+    .table-container {
+      overflow-x: auto;
+      border: 1px solid #dee2e6;
+      border-radius: 0.25rem;
+      max-height: 70vh;
+    }
+    .cont_lst-tablas{
+      max-height: 85vh;
+      overflow: auto;
+      border: 1px solid #dee2e6;
+    }
+    .field-row { margin-bottom: 6px; padding: 10px; background: #f9f9f9; border-radius: 5px; }
+    #tableList li.list-group-item { cursor: pointer; }
+    #tableList li.list-group-item.selected {
+      background-color: #007bff;
+      color: white;
+    }
+    </style>
+</head>
+<body class="p-3">
+    <div class="container-fluid">
+        <!-- Fila 1: col-12 con inputs -->
+        <div class="row mb-3">
+            <div class="col-12 bg-light border p-3">
+                <h4 class="mb-3">SQLite WEB Editor</h4>
+                <div class="form-row">
+                    <!-- Input File -->
+                    <div class="col-md-4 mb-2">
+                        <div class="input-group">
+                            <div class="custom-file">
+                                <input type="file" class="custom-file-input" id="inputFileSQLite" onchange="loadDatabaseFromFile();">
+                                <label class="custom-file-label" for="inputFileSQLite">Select Database SQLite</label>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Botón Crear Database -->
+                    <div class="col-md-4 mb-2">
+                        <button type="button" class="btn btn-primary btn-block" onclick="openCreateDatabaseOverlayWithTemplates();">
+                            Create SQLite Database
+                        </button>
+                    </div>
+                    <!-- Botón Descargar Database -->
+                    <div class="col-md-4 mb-2">
+                        <button type="button" class="btn btn-success btn-block" onclick="downloadDatabase()">
+                            Download Database
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Fila 2: col-md-4 (lateral) y col-md-8 (principal) -->
+        <div class="row mb-3">
+            <!-- Columna izquierda (col-md-4) -->
+            <div class="col-md-4 col-12 bg-light border p-3">
+                <!-- Encabezado con botón flotante -->
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0">List of Tables</h5>
+                    <button type="button" class="btn btn-sm btn-primary" onclick="openCreateTableOverlay()">
+                        Create Table
+                    </button>
+                </div>
+                <!-- Lista de tablas -->
+                <div class="cont_lst-tablas">
+                  <ul id="tableList" class="list-group">
+                    <div class="alert alert-info mb-0">The database tables are shown here.</div>
+                  </ul>
+                </div>
+            </div>
+
+            <!-- Columna principal (col-md-8) -->
+            <div class="col-md-8 col-12 bg-light border p-3">
+                <!-- Título de tabla -->
+                <h5 class="mb-3">Table: <span id="tableName" class="text-muted"></span></h5>
+                <!-- Tabs de navegación -->                 
+                <ul class="nav nav-tabs mb-3" id="tablaTabs" role="tablist">
+                  <li class="nav-item">
+                      <a class="nav-link active" id="datos-tab" data-toggle="tab" href="#datos" role="tab">
+                          View Table
+                      </a>
+                  </li>
+                  <li class="nav-item">
+                      <a class="nav-link" id="estructura-tab" data-toggle="tab" href="#estructura" role="tab">
+                          Structure
+                      </a>
+                  </li>
+                  <li class="nav-item">
+                      <a class="nav-link" id="consulta-tab" data-toggle="tab" href="#consulta" role="tab">
+                          SQL Query
+                      </a>
+                  </li>
+                  <li class="nav-item">
+                      <a class="nav-link" id="triggers-tab" data-toggle="tab" href="#triggers" role="tab">
+                          Triggers
+                      </a>
+                  </li>
+                </ul>                 
+                
+                <!-- Contenido de los tabs -->
+                <div class="tab-content" id="tablaTabsContent">                    
+                    <!-- Tab 1: Datos -->
+                    <div class="tab-pane fade show active" id="datos" role="tabpanel">
+                      <!-- Encabezado con botón flotante -->
+                      <div class="d-flex justify-content-between align-items-center mb-3">
+                          <h5 id="tableSelTitle" class="mb-0">Selected Table</h5>
+                          <button type="button" class="btn btn-sm btn-primary" onclick="openEditOverlay(null)">
+                              Add Record
+                          </button>
+                      </div>
+
+                      <!-- Tabla de datos -->                       
+                      <div class="table-container">
+                        <table id="dataTable" class="table table-sm table-bordered mb-0">
+                          <thead id="dataHeader"></thead>
+                          <tbody id="dataTableBody"></tbody>
+                        </table>
+                        <div id="dataRows" class="clusterize-scroll">
+                          <!-- Clusterize inyectará las filas aquí -->
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <!-- Tab 2: Estructura -->
+                    <div class="tab-pane fade" id="estructura" role="tabpanel">
+                      <!-- Encabezado con botón flotante -->
+                      <div class="d-flex justify-content-between align-items-center mb-3">
+                          <h5 id="tableSelTitleStruct" class="mb-0">Selected Table Structure</h5>
+                          <button type="button" class="btn btn-sm btn-primary" onclick="openEditTableOverlay()">
+                              Edit Structure
+                          </button>
+                      </div> 
+                      <div id="schemaTable">
+                        <div class="alert alert-info mb-0">The structure of the selected table is shown here.</div>
+                      </div>
+                    </div>
+
+                    <!-- Tab 3: Consulta SQL -->
+                    <div class="tab-pane fade" id="consulta" role="tabpanel">
+                        <!-- Resultados -->
+                        <div id="queryResults" class="table-container mb-2">
+                            <div class="alert alert-info mb-0">The results will appear here.</div>
+                        </div>
+                        <!-- Textarea para consulta -->
+                        <div class="mb-3">
+                            <label for="sqlQuery" class="sr-only">SQL Query</label>
+                            <textarea class="form-control" id="sqlQuery" rows="4" placeholder="Write your SQL query here..."></textarea>
+                        </div>
+                        <!-- Botones -->
+                        <div class="mb-3">
+                            <button type="button" class="btn btn-primary mr-2" onclick="executeSQLQuery()">
+                                Run Query
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="$('#sqlQuery').val('');">
+                                Clear
+                            </button>
+                        </div>                        
+                    </div>
+
+                    <!-- Tab 2: Triggers -->
+                    <div class="tab-pane fade" id="triggers" role="tabpanel">
+                        <button type="button" class="btn btn-warning btn-sm mb-2" id="addTriggerBtn" onclick="openCreateTriggerOverlay();">
+                          <i class="fas fa-edit"></i> Add Trigger
+                        </button>
+                        <div id="triggerList">
+                          <div class="alert alert-info mb-0">The triggers of the selected table are shown here.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Overlay genérico -->
+  <div id="overlay">
+    <div id="overlay-content">
+      <h5 id="overlay-title">Form</h5>
+      <form id="recordForm"></form>
+      <div class="mt-3 d-flex justify-content-end">
+        <button type="button" class="btn btn-secondary mr-2" id="overlayCancel" onclick="hideOverlay()">Cancel</button>
+        <button type="button" class="btn btn-primary" id="overlaySave" onclick="handleOverlaySave()">Save</button>
+      </div>
+    </div>
+  </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/sql-wasm.js"></script>
+<script>
+var DBNAME;
+var DB = null;
+var CURRENT_TABLE = null;
+var currentRowId = null;
+var clusterize = null;
+var overlayMode = null;
+let SQLready = false;
+
+  initSqlJs({
+      locateFile: filename => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.8.0/${filename}`
+    }).then(function(SQL) {
+      window.SQL = SQL;
+      SQLready = true;
+    });
+  
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  function handleOverlaySave() {
+    switch(overlayMode) {
+      case 'create-table':
+        saveCreateTable();
+        break;
+      case 'add-column':
+        saveAddColumn();
+        break;
+      case 'edit-record':
+        saveEditRecord();
+        break;
+      case 'edit-table':
+        saveEditTable();
+        break;
+      case 'create-trigger':
+        saveTrigger();
+        break;
+      case 'create-database':
+        saveCreateDatabaseWithTemplate();
+        break;
+      default:
+        alert('Overlay mode not recognized.');
+    }
+  }
+
+  function loadDatabaseFromFile() {
+    if (!SQLready) {
+        alert('Please wait, SQLite is still loading.');
+        return;
+    }
+
+    const file = document.querySelector("#inputFileSQLite").files[0];
+    if (!file) return;
+    DBNAME = file.name;
+    const reader = new FileReader();
+    reader.onload = function() {
+      try {
+        DB = new SQL.Database(new Uint8Array(reader.result));
+        loadTables();
+      } catch (err) {
+        alert('Error loading database: ' + err.message);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function createNewDatabase(name) {
+    if (!SQLready) {
+        alert('Please wait, SQLite is still loading.');
+        return;
+    }
+
+    DB = new SQL.Database();
+    alert(`Database "${name}" created in memory.`);
+    loadTables();
+  }
+
+  function loadTables() {
+    const result = DB.exec("SELECT name FROM sqlite_master WHERE type='table';");
+    const tableNames = result.length ? result[0].values.map(row => row[0]) : [];
+    const $list = $('#tableList');
+    $list.empty();
+    tableNames.forEach(name => {
+      const $li = $(`
+        <li class="list-group-item d-flex justify-content-between align-items-center" onclick="selectTable('${name}')">
+          <span class="table-name">${escapeHtml(name)}</span>
+          <div class="table-item-actions">
+            <button class="btn btn-xs btn-danger delete-table fas fa-times" onclick="event.stopPropagation(); deleteTable('${name}')"></button>
+          </div>
+        </li>
+      `);
+      $list.append($li);
+    });
+  }
+
+  function selectTable(tableName) {
+    CURRENT_TABLE = tableName;
+    $('#tableName').text(tableName);
+    $('#tableSelTitle').text(`Selected Table: ${tableName}`); 
+    $('#tableSelTitleStruct').text(`Selected Table Structure: ${tableName}`);
+    renderData();
+    renderSchema();
+    loadTriggers();
+  }
+
+  function getPrimaryKeyInfo(tableName) {
+    try {
+      // Obtener información de las columnas de la tabla
+      const result = DB.exec(`PRAGMA table_info("${tableName}")`);
+      if (!result || !result[0] || !result[0].values) {
+        return null;
+      }
+      // Buscar columnas que sean Primary Key
+      // En SQLite, pk = 0 significa no es PK, pk > 0 significa es PK
+      const pkColumns = result[0].values
+        .filter(row => row[5] > 0) // Columna 5 es 'pk'
+        .map(row => row[1]); // Columna 1 es 'name'
+      if (pkColumns.length === 0) {
+        return null; // No hay Primary Key
+      }
+      return {
+        columns: pkColumns,
+        isComposite: pkColumns.length > 1,
+        field: pkColumns[0] // Primera columna PK (para PK simple)
+      };
+    } catch (err) {
+      console.error('Error obtaining Primary Key:', err);
+      return null;
+    }
+  }
+
+  function renderData() {
+    if (!CURRENT_TABLE || !DB) return;
+    
+    // Limpiar contenido anterior
+    $('#dataHeader').html('');
+    $('#dataTableBody').html('');
+    $('#dataRows').html('');
+    
+    // Obtener información de la Primary Key
+    const pkInfo = getPrimaryKeyInfo(CURRENT_TABLE);
+    const hasPrimaryKey = pkInfo !== null;
+    
+    let res;
+    try {
+      res = DB.exec(`SELECT * FROM "${CURRENT_TABLE}"`);
+    } catch (e) {
+      console.error('Error loading data:', e);
+      $('#dataHeader').html('<tr><th colspan="100" class="text-center text-danger">Error loading data</th></tr>');
+      return;
+    }
+
+    if (!res.length || !res[0].columns || !res[0].values) {
+      $('#dataHeader').html('<tr><th colspan="100" class="text-center text-muted">Empty table</th></tr>');
+      return;
+    }
+    
+    const columns = res[0].columns;
+    const rows = res[0].values;
+    
+    // Crear encabezados
+    let headerHtml = '<tr>';
+    columns.forEach(col => {
+      headerHtml += `<th>${escapeHtml(col)}</th>`;
+    });
+    headerHtml += '<th>Actions</th></tr>';
+    $('#dataHeader').html(headerHtml);
+    
+    // Crear filas
+    const items = rows.map(row => {
+      // Celdas de datos
+      const cells = row.map(cell => 
+        cell === null ? '<td><em class="text-muted">NULL</em></td>' : `<td>${escapeHtml(String(cell))}</td>`
+      );
+      
+      // Botones de acciones
+      let actionButtons = '<td>';
+      
+      // Botón Editar
+      const rowJson = encodeURIComponent(JSON.stringify(row));
+
+      // Botónes
+      if (!hasPrimaryKey) {
+        actionButtons += `<button class="btn btn-sm btn-success fas fa-edit mr-1" title="Without Primary Key"></button>`;
+        actionButtons += `<button class="btn btn-sm btn-secondary fas fa-times" title="Without Primary Key" disabled></button>`;
+      } else if (pkInfo.isComposite) {
+        // PK compuesta
+        const pkObject = {};
+        pkInfo.columns.forEach(col => {
+          const idx = columns.indexOf(col);
+          pkObject[col] = row[idx];
+        });
+        const pkJson = escapeHtml(JSON.stringify(pkObject));
+
+        actionButtons += `<button class="btn btn-sm btn-success edit-record-btn fas fa-edit mr-1" title="Edit" data-table="${CURRENT_TABLE}" data-pk='${pkJson}'></button>`;
+        actionButtons += `<button class="btn btn-sm btn-danger del-record-btn fas fa-times" title="Delete" data-table="${CURRENT_TABLE}" data-pk='${pkJson}'></button>`;
+      } else {
+        // PK simple
+        const pkObject = {
+          [pkInfo.field]: row[columns.indexOf(pkInfo.field)]
+        };
+        const pkJson = escapeHtml(JSON.stringify(pkObject));
+
+        actionButtons += `<button class="btn btn-sm btn-success edit-record-btn fas fa-edit mr-1" title="Edit" data-table="${CURRENT_TABLE}" data-pk='${pkJson}'></button>`;
+        actionButtons += `<button class="btn btn-sm btn-danger del-record-btn fas fa-times" title="Delete" data-table="${CURRENT_TABLE}" data-pk='${pkJson}'></button>`;
+      }
+      
+      actionButtons += '</td>';
+      cells.push(actionButtons);
+      return '<tr>' + cells.join('') + '</tr>';
+    });
+    
+    // Limpiar Clusterize anterior
+    if (window.clusterize) {
+      window.clusterize.destroy();
+      window.clusterize = null;
+    }
+    
+    // Inicializar Clusterize
+    window.clusterize = new Clusterize({
+      rows: items,
+      scrollId: 'dataRows',
+      contentId: 'dataTableBody',
+      tag: 'tbody'
+    });
+    
+    // Eventos delegados
+    $('#dataTableBody')
+      .off('click.crud')
+      .on('click.crud', '.edit-record-btn', function (e) {
+        e.stopPropagation();
+        openEditOverlay(CURRENT_TABLE, $(this));
+      })
+      .on('click.crud', '.del-record-btn', function (e) {
+        e.stopPropagation();
+        deleteRecord(CURRENT_TABLE, $(this));
+      });
+  }
+
+  function renderSchema() {
+    if (!CURRENT_TABLE) return;
+    const res = DB.exec(`PRAGMA table_info("${CURRENT_TABLE}");`);
+    if (!res.length || !res[0].values.length) {
+      $('#schemaTable').html('<p>There is no schematic information.</p>');
+      return;
+    }
+
+    const cols = ['cid', 'name', 'type', 'notnull', 'dflt_value', 'pk'];
+    let html = `<table class="table table-sm"><thead><tr>`;
+    cols.forEach(c => html += `<th>${c}</th>`);
+    html += '<th>Actions</th></tr></thead><tbody>';
+
+    res[0].values.forEach(row => {
+      html += '<tr>';
+      row.forEach(cell => {
+        html += `<td>${cell === null ? '<em>null</em>' : escapeHtml(String(cell))}</td>`;
+      });
+      const colName = row[1];
+      html += `<td><button class="btn btn-xs btn-danger delete-column fas fa-times" data-col="${colName}"></button></td>`;
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    $('#schemaTable').html(html);
+
+    $('#schemaTable .delete-column').on('click', function() {
+      const colName = $(this).data('col');
+      if (confirm(`Delete the column "${colName}" from the table "${CURRENT_TABLE}"?\nThis action cannot be undone!`)) {
+        deleteColumn(CURRENT_TABLE, colName);
+      }
+    });
+  }
+
+  function deleteTable(tableName) {
+    try {
+      DB.run(`DROP TABLE "${tableName}";`);
+      if (CURRENT_TABLE === tableName) {
+        CURRENT_TABLE = null;
+        $('#currentTableTitle').text('Tabla: -');
+        $('#dataHeader, #dataRows, #schemaTable').empty();
+        $('#dataTable thead, #dataTable tbody').html('');
+      }
+      loadTables();
+    } catch (err) {
+      alert('Error while deleting table: ' + err.message);
+    }
+  }
+
+  function deleteRecord(tableName, $btn) {
+    if (!DB) {
+      alert('No database is loaded.');
+      return;
+    }
+
+    if (!tableName) {
+      alert('Error: Table name is required.');
+      return;
+    }
+
+    // Obtener PK desde el botón (JSON unificado)
+    const pk = $btn.data('pk');
+
+    if (!pk || typeof pk !== 'object' || Object.keys(pk).length === 0) {
+      alert('No primary key could be identified for the record.');
+      return;
+    }
+
+    // Construir WHERE dinámico
+    const whereClause = Object.keys(pk)
+      .map(k => `"${k}" = ?`)
+      .join(' AND ');
+
+    const wherePreview = Object.entries(pk)
+      .map(([k, v]) => `"${k}" = ${v === null ? 'NULL' : v}`)
+      .join(' AND ');
+
+    // Confirmación
+    const confirmMessage =
+      `Delete record from table "${tableName}"?\n\n` +
+      `${wherePreview}\n\n` +
+      `⚠️ This action cannot be undone.`;
+
+    if (!confirm(confirmMessage)) return;
+
+    try {
+      const deleteQuery = `
+        DELETE FROM "${tableName}"
+        WHERE ${whereClause};
+      `;
+
+      // Ejecutar DELETE con parámetros
+      DB.run(deleteQuery, Object.values(pk));
+
+      // Verificar cambios
+      const result = DB.exec(`SELECT changes()`);
+      const deletedCount = result[0].values[0][0];
+
+      if (deletedCount === 0) {
+        alert('No record was found with those values.');
+        return;
+      }
+
+      // Eliminar fila del DOM
+      $btn.closest('tr').remove();
+
+      // Refrescar Clusterize
+      if (window.clusterize) {
+        window.clusterize.refresh();
+      }
+
+      alert('✅ Record deleted successfully.');
+
+    } catch (err) {
+      console.error('Error while deleting record:', err);
+      alert(`❌ Error while deleting: ${err.message}`);
+    }
+  }
+
+
+  // === EDITAR/INSERTAR REGISTRO ===
+  function openEditOverlay(tableName, btn) {
+    console.log('openEditOverlay llamado');
+    overlayMode = 'edit-record';
+
+    const $btn = $(btn);
+    const pkData = $btn.data('pk'); // objeto o undefined
+    const hasPK = pkData && typeof pkData === 'object';
+
+    const $form = $('#recordForm');
+    const $title = $('#overlay-title');
+
+    if (!DB || !CURRENT_TABLE) {
+      document.getElementById("dataRows").innerHTML =
+        '<div class="alert alert-danger mb-0">First you must load a database and select a table.</div>';
+      return;
+    }
+
+    // Guardar PK actuales para el UPDATE
+    window.currentPK = hasPK ? pkData : null;
+
+    const schemaRes = DB.exec(`PRAGMA table_info("${CURRENT_TABLE}");`);
+    const fields = schemaRes[0].values.map(row => ({
+      name: row[1],
+      type: row[2],
+      dflt_value: row[4]
+    }));
+
+    let formHtml = '';
+    const values = {};
+
+    if (hasPK) {
+      // Construir WHERE dinámico
+      const whereClause = Object.keys(pkData)
+        .map(k => `"${k}" = ?`)
+        .join(' AND ');
+
+      const sql = `SELECT * FROM "${CURRENT_TABLE}" WHERE ${whereClause}`;
+      const params = Object.values(pkData);
+
+      const dataRes = DB.exec(sql, params);
+
+      if (dataRes.length && dataRes[0].values.length) {
+        const rowValues = dataRes[0].values[0];
+        dataRes[0].columns.forEach((col, i) => {
+          values[col] = rowValues[i];
+        });
+      }
+
+      $title.text('Edit Record');
+    } else {
+      $title.text('New Record');
+    }
+
+    fields.forEach(field => {
+      let val = '';
+
+      if (hasPK) {
+        val = values[field.name] ?? '';
+      } else {
+        val = field.dflt_value ?? '';
+        val = cleanDefaultValue(val, field.type);
+      }
+
+      formHtml += `
+        <div class="form-group row mb-1">
+          <label class="col-sm-4 col-form-label">${escapeHtml(field.name)} (${field.type})</label>
+          <div class="col-sm-8">
+            <input type="text"
+                  class="form-control"
+                  name="${field.name}"
+                  value="${escapeHtml(String(val))}"
+                  data-type="${field.type}">
+          </div>
+        </div>
+      `;
+    });
+
+    $form.html(formHtml);
+    $('#overlay').show();
+  }
+
+
+  // Función para limpiar valores por defecto de SQLite
+  function cleanDefaultValue(value, type) {
+    if (value === null || value === undefined || value === '') {
+      return '';
+    }
+    
+    // Si es un número, devolver tal cual
+    if (type === 'INTEGER' || type === 'REAL') {
+      // Quitar comillas si las tiene
+      return String(value).replace(/^["']|["']$/g, '');
+    }
+    
+    // Si es TEXT o BLOB, quitar comillas externas
+    if (type === 'TEXT' || type === 'BLOB') {
+      // Quitar comillas simples o dobles del inicio y fin
+      return String(value).replace(/^["']|["']$/g, '');
+    }
+    
+    // Para otros tipos, devolver tal cual
+    return String(value);
+  }
+
+  function saveEditRecord() {
+    const $form = $('#recordForm');
+    const formData = {};
+
+    $form.find('[name]').each(function () {
+      const $el = $(this);
+      const name = $el.attr('name');
+      let value = $el.val();
+
+      if (value === '' || value === null || value === undefined) {
+        formData[name] = null;
+      } else {
+        const type = $el.data('type');
+        if (type === 'INTEGER' || type === 'REAL') {
+          const num = parseFloat(value);
+          formData[name] = isNaN(num) ? null : num;
+        } else {
+          formData[name] = value;
+        }
+      }
+    });
+
+    const fieldNames = Object.keys(formData);
+    const values = Object.values(formData);
+
+    try {
+      if (window.currentPK) {
+        // UPDATE
+        const setClause = fieldNames
+          .map(name => `"${name}" = ?`)
+          .join(', ');
+
+        const whereClause = Object.keys(currentPK)
+          .map(k => `"${k}" = ?`)
+          .join(' AND ');
+
+        const sql = `
+          UPDATE "${CURRENT_TABLE}"
+          SET ${setClause}
+          WHERE ${whereClause};
+        `;
+
+        DB.run(sql, [...values, ...Object.values(currentPK)]);
+        alert('Registry updated successfully');
+
+      } else {
+        // INSERT
+        const cols = fieldNames.map(n => `"${n}"`).join(', ');
+        const placeholders = fieldNames.map(() => '?').join(', ');
+
+        DB.run(
+          `INSERT INTO "${CURRENT_TABLE}" (${cols}) VALUES (${placeholders});`,
+          values
+        );
+
+        alert('Record created successfully');
+      }
+
+      renderData();
+      $('#overlay').hide();
+
+    } catch (err) {
+      alert('Error while saving: ' + err.message);
+      console.error(err);
+    }
+  }
+
+
+  // === CREAR TABLA MEJORADA ===
+  function openCreateTableOverlay() {
+    if (!DB) {
+      document.getElementById("tableList").innerHTML = '<div class="alert alert-danger mb-0">First you must have an active database.</div>';
+      return;
+    }
+
+    overlayMode = 'create-table';
+    const $form = $('#recordForm');
+    const $title = $('#overlay-title');
+    $title.text('Create New Table');
+
+    let formHtml = `
+      <div class="form-group">
+        <label>Table Name</label>
+        <input type="text" class="form-control" id="newTableName" required placeholder="ej. users">
+      </div>
+      <h6>Initial Fields</h6>
+      <div id="fieldsContainer"></div>
+      <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="addFieldBtn">+ Add Field</button>
+    `;
+    $form.html(formHtml);
+
+    addFieldRowForTable();
+
+    $('#addFieldBtn').off('click').on('click', addFieldRowForTable);
+    $('#overlay').show();
+  }
+
+  function addFieldRowForTable() {
+    const fieldHtml = `
+      <div class="field-row d-flex flex-wrap align-items-end gap-2">
+        <input type="text" class="form-control fieldName" placeholder="name" style="flex:2; min-width:120px;">
+        <select class="form-control fieldType mx-1" style="flex:1; min-width:100px;">
+          <option value="TEXT">TEXT</option>
+          <option value="INTEGER">INTEGER</option>
+          <option value="REAL">REAL</option>
+          <option value="BLOB">BLOB</option>
+        </select>
+        <input type="text" class="form-control defaultValue mx-1" placeholder="DEFAULT" style="flex:1; min-width:100px;">
+        <div class="form-check mx-1" title="NOT NULL - It cannot be null">
+          <input class="form-check-input isNotNull" type="checkbox">
+          <label class="form-check-label">NN</label>
+        </div>
+        <div class="form-check mx-1" title="PRIMARY KEY">
+          <input class="form-check-input isPK" type="checkbox">
+          <label class="form-check-label">PK</label>
+        </div>
+        <div class="form-check mx-1" title="UNIQUE - Unique value in the table">
+          <input class="form-check-input isUnique" type="checkbox">
+          <label class="form-check-label">UQ</label>
+        </div>
+        <div class="form-check mx-2" title="AUTOINCREMENT (only INTEGER PK)">
+          <input class="form-check-input isAutoinc" type="checkbox" disabled>
+          <label class="form-check-label">AI</label>
+        </div>        
+        <button type="button" class="btn btn-sm btn-danger removeField fas fa-times"></button>
+      </div>
+    `;
+    
+    // Agregar el nuevo campo
+    const $newRow = $(fieldHtml);
+    $('#fieldsContainer').append($newRow);
+    
+    // Evento para eliminar campo (solo en este row)
+    $newRow.find('.removeField').on('click', function() {
+      $(this).closest('.field-row').remove();
+    });
+    
+    // Evento para validar todos los checkboxes y tipo (solo en este row)
+    $newRow.on('change', '.isPK, .isUnique, .isNotNull, .fieldType', function() {
+      const $row = $(this).closest('.field-row');
+      validateFieldRow($row);
+    });
+    
+    // Validación inicial al crear el campo
+    validateFieldRow($newRow);
+  }
+
+  // Función auxiliar para validar el campo completo
+  function validateFieldRow($row) {
+    const isPK = $row.find('.isPK').prop('checked');
+    const isUnique = $row.find('.isUnique').prop('checked');
+    const isNotNull = $row.find('.isNotNull').prop('checked');
+    const type = $row.find('.fieldType').val();
+    const $ai = $row.find('.isAutoinc');
+    const $unique = $row.find('.isUnique');
+    const $notNull = $row.find('.isNotNull');
+    
+    // Si es PK, deshabilitar UNIQUE (es redundante)
+    if (isPK) {
+      $unique.prop('disabled', true);
+    } else {
+      $unique.prop('disabled', false);
+    }
+    
+    // Si es PK, automáticamente marcar NOT NULL (PK implica NOT NULL)
+    if (isPK) {
+      $notNull.prop('checked', true).prop('disabled', true);
+    } else {
+      $notNull.prop('disabled', false);
+    }
+    
+    // AUTOINCREMENT solo si es PK y tipo es INTEGER
+    if (isPK && type === 'INTEGER') {
+      $ai.prop('disabled', false);
+    } else {
+      $ai.prop('disabled', true).prop('checked', false);
+    }
+  }
+
+  function saveCreateTable() {
+    const tableName = $('#newTableName').val().trim();
+    if (!tableName) { alert('Required table name'); return; }
+
+    const fields = [];
+    $('#fieldsContainer .field-row').each(function() {
+      const $row = $(this);
+      const name = $row.find('.fieldName').val().trim();
+      const type = $row.find('.fieldType').val();
+      const isPK = $row.find('.isPK').prop('checked');
+      const isUnique = $row.find('.isUnique').prop('checked');
+      const isNotNull = $row.find('.isNotNull').prop('checked');
+      const isAI = $row.find('.isAutoinc').prop('checked');
+      const def = $row.find('.defaultValue').val().trim();
+
+      if (!name) return;
+
+      let colDef = `"${name}" ${type}`;
+      
+      // Agregar restricciones
+      if (isPK) {
+        colDef += " PRIMARY KEY";
+        // PRIMARY KEY ya implica UNIQUE y NOT NULL
+        if (isAI && type === 'INTEGER') {
+          colDef += " AUTOINCREMENT";
+        }
+      } else {
+        // Si no es PK, agregar UNIQUE si está marcado
+        if (isUnique) {
+          colDef += " UNIQUE";
+        }
+        // Si no es PK, agregar NOT NULL si está marcado
+        if (isNotNull) {
+          colDef += " NOT NULL";
+        }
+        // AUTOINCREMENT solo funciona con PK INTEGER, así que lo ignoramos aquí
+      }
+      
+      // Agregar DEFAULT si existe
+      if (def) {
+        colDef += ` DEFAULT ${processDefaultValue(def, type)}`;
+      }
+
+      fields.push(colDef);
+    });
+
+    if (fields.length === 0) { alert('You must define at least one field.'); return; }
+
+    const sql = `CREATE TABLE "${tableName}" (${fields.join(', ')});`;
+    try {
+      DB.run(sql);
+      loadTables();
+      selectTable(tableName);
+      $('#overlay').hide();
+    } catch (err) {
+      alert('Error while creating table: ' + err.message+'.\nSQL: '+sql);
+    }
+  }
+
+  // Función para procesar el valor por defecto según el tipo
+  function processDefaultValue(value, type) {
+    // Si está vacío, devolver tal cual
+    if (!value) return value;
+    
+    // Verificar si ya tiene comillas (dobles o simples)
+    const hasSingleQuotes = /^'.*'$/.test(value);
+    const hasDoubleQuotes = /^".*"$/.test(value);
+    const hasQuotes = hasSingleQuotes || hasDoubleQuotes;
+    
+    // Para tipos TEXT, BLOB: necesitan comillas
+    if (type === 'TEXT' || type === 'BLOB') {
+      if (hasQuotes) {
+        return value; // Ya tiene comillas, devolver tal cual
+      } else {
+        // Agregar comillas simples automáticamente
+        return `'${value}'`;
+      }
+    }
+    
+    // Para tipos INTEGER, REAL: no deben tener comillas
+    if (type === 'INTEGER' || type === 'REAL') {
+      if (hasQuotes) {
+        // Quitar comillas si las tiene
+        return value.replace(/^["']|["']$/g, '');
+      } else {
+        return value; // Devolver tal cual
+      }
+    }
+    
+    // Para otros tipos, devolver tal cual
+    return value;
+  }
+
+  // Función auxiliar para validar AUTOINCREMENT
+  function validateAutoIncrement($row) {
+    const isPK = $row.find('.isPK').prop('checked');
+    const type = $row.find('.fieldType').val();
+    const $ai = $row.find('.isAutoinc');
+    
+    if (isPK && type === 'INTEGER') {
+      $ai.prop('disabled', false);
+    } else {
+      $ai.prop('disabled', true).prop('checked', false);
+    }
+  }
+
+
+
+
+  function openEditTableOverlay() {
+    if (!DB || !CURRENT_TABLE) {
+      document.getElementById("tableList").innerHTML = '<div class="alert alert-danger mb-0">First you must select a table.</div>';
+      return;
+    }
+
+    overlayMode = 'edit-table';
+    const $form = $('#recordForm');
+    const $title = $('#overlay-title');
+    $title.text(`Editar Tabla: ${CURRENT_TABLE}`);
+
+    // Cargar estructura de la tabla
+    const schemaRes = DB.exec(`PRAGMA table_info("${CURRENT_TABLE}");`);
+    
+    if (!schemaRes || !schemaRes[0] || !schemaRes[0].values) {
+      alert('Could not load table structure.');
+      return;
+    }
+
+    const fields = schemaRes[0].values.map(row => ({
+      cid: row[0],           // Column ID
+      name: row[1],          // Nombre
+      type: row[2],          // Tipo
+      notnull: row[3],       // NOT NULL (1 = sí, 0 = no)
+      dflt_value: row[4],    // DEFAULT
+      pk: row[5]             // PRIMARY KEY (0 = no, >0 = sí)
+    }));
+
+    let formHtml = `      
+      <div id="existingFieldsContainer" class="mb-3"></div>
+      
+      <hr class="my-3">
+      
+      <h6>Add New Fields</h6>
+      <div id="newFieldsContainer"></div>
+      <button type="button" class="btn btn-sm btn-outline-secondary mt-2" id="addNewFieldBtn">
+        <i class="fas fa-plus"></i> Add Field
+      </button>
+    `;
+    $form.html(formHtml);
+
+    // Renderizar campos existentes (editables)
+    renderExistingFields(fields);
+    
+    // Agregar primer campo nuevo vacío
+    addFieldRowForEdit();
+
+    // Evento para agregar nuevos campos
+    $('#addNewFieldBtn').off('click').on('click', addFieldRowForEdit);
+    $('#overlay').show();
+  }
+
+  // Renderizar campos existentes (editables)
+  function renderExistingFields(fields) {
+    let html = '';
+    
+    fields.forEach(field => {
+      // Determinar si es PK
+      const isPK = field.pk > 0;
+      
+      // Determinar si es UNIQUE
+      const isUnique = checkIfUnique(field.name);
+      
+      html += `
+        <div class="card mb-2 field-existing" data-field="${escapeHtml(field.name)}">
+          <div class="card-body p-1">
+            <div class="d-flex justify-content-between align-items-center">
+              <div style="flex: 1;">
+                <div class="d-flex align-items-center mb-0">
+                  <input type="text" class="form-control form-control-sm field-name-edit" 
+                    value="${escapeHtml(field.name)}" 
+                    style="width: 150px; margin-right: 10px;"
+                    data-original="${escapeHtml(field.name)}">
+                  <select class="form-control form-control-sm field-type-edit" style="width: 100px; margin-right: 10px;">
+                    <option value="TEXT" ${field.type === 'TEXT' ? 'selected' : ''}>TEXT</option>
+                    <option value="INTEGER" ${field.type === 'INTEGER' ? 'selected' : ''}>INTEGER</option>
+                    <option value="REAL" ${field.type === 'REAL' ? 'selected' : ''}>REAL</option>
+                    <option value="BLOB" ${field.type === 'BLOB' ? 'selected' : ''}>BLOB</option>
+                  </select>
+                  <input type="text" class="form-control form-control-sm field-default-edit" 
+                    placeholder="DEFAULT" 
+                    value="${field.dflt_value !== null && field.dflt_value !== undefined ? escapeHtml(String(field.dflt_value)) : ''}"
+                    style="width: 120px; margin-right: 10px;">
+                  <div class="form-check form-check-inline mr-3">
+                    <input class="form-check-input field-notnull-edit" type="checkbox" ${field.notnull ? 'checked' : ''} id="nn_${field.name}">
+                    <label class="form-check-label" for="nn_${field.name}">NN</label>
+                  </div>
+                  ${isPK ? '<span class="badge badge-primary">PK</span>' : ''}
+                  ${isUnique ? '<span class="badge badge-success ml-1">UNIQUE</span>' : ''}
+                </div>
+              </div>
+              <div>
+                <button type="button" class="btn btn-sm btn-danger remove-existing-field mr-1" title="Delete column">
+                  <i class="fas fa-times"></i>
+                </button>
+                <button type="button" class="btn btn-sm btn-warning save-field-changes" title="Save changes">
+                  <i class="fas fa-save"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+    
+    $('#existingFieldsContainer').html(html);
+    
+    // Eventos para campos existentes
+    $('.remove-existing-field').off('click').on('click', function() {
+      const $card = $(this).closest('.field-existing');
+      const fieldName = $card.data('field');
+      
+      if (confirm(`Delete the column "${fieldName}"?\nThis action cannot be undone.`)) {
+        deleteColumn(CURRENT_TABLE, fieldName);
+      }
+    });
+    
+    $('.save-field-changes').off('click').on('click', function() {
+      const $card = $(this).closest('.field-existing');
+      saveFieldChanges($card);
+    });
+    
+    // Evento para detectar cambios en el nombre (para renombrar)
+    $('.field-name-edit').off('change').on('change', function() {
+      const $card = $(this).closest('.field-existing');
+      const originalName = $(this).data('original');
+      const newName = $(this).val().trim();
+      
+      if (newName && newName !== originalName) {
+        renameColumn(CURRENT_TABLE, originalName, newName);
+        $(this).data('original', newName);
+        $card.data('field', newName);
+      }
+    });
+  }
+
+  // Verificar si un campo es UNIQUE
+  function checkIfUnique(fieldName) {
+    try {
+      const indexList = DB.exec(`PRAGMA index_list("${CURRENT_TABLE}");`);
+      
+      if (!indexList || !indexList[0] || !indexList[0].values) {
+        return false;
+      }
+      
+      for (const indexRow of indexList[0].values) {
+        const indexName = indexRow[1];
+        const isUnique = indexRow[2] === 1;
+        
+        if (isUnique) {
+          const indexInfo = DB.exec(`PRAGMA index_info("${indexName}");`);
+          
+          if (indexInfo && indexInfo[0] && indexInfo[0].values) {
+            for (const infoRow of indexInfo[0].values) {
+              if (infoRow[2] === fieldName) {
+                return true;
+              }
+            }
+          }
+        }
+      }
+      
+      return false;
+    } catch (err) {
+      console.error('Error verificando UNIQUE:', err);
+      return false;
+    }
+  }
+
+  // Guardar cambios de un campo existente (tipo, DEFAULT, NOT NULL)
+  function saveFieldChanges($card) {
+    const fieldName = $card.data('field');
+    const newType = $card.find('.field-type-edit').val();
+    const newDefault = $card.find('.field-default-edit').val().trim();
+    const newNotNull = $card.find('.field-notnull-edit').prop('checked');
+    
+    try {
+      // 1. Modificar tipo de datos si cambió
+      const currentInfo = DB.exec(`PRAGMA table_info("${CURRENT_TABLE}");`);
+      const currentField = currentInfo[0].values.find(row => row[1] === fieldName);
+      const currentType = currentField[2];
+      
+      if (newType !== currentType) {
+        DB.run(`ALTER TABLE "${CURRENT_TABLE}" ALTER COLUMN "${fieldName}" TYPE ${newType};`);
+      }
+      
+      // 2. Modificar DEFAULT
+      const currentDefault = currentField[4];
+      if (newDefault !== (currentDefault || '')) {
+        if (newDefault) {
+          const processed = processDefaultValue(newDefault, newType);
+          DB.run(`ALTER TABLE "${CURRENT_TABLE}" ALTER COLUMN "${fieldName}" SET DEFAULT ${processed};`);
+        } else {
+          DB.run(`ALTER TABLE "${CURRENT_TABLE}" ALTER COLUMN "${fieldName}" DROP DEFAULT;`);
+        }
+      }
+      
+      // 3. Modificar NOT NULL (requiere recrear tabla o usar CHECK)
+      const currentNotNull = currentField[3];
+      if (newNotNull !== (currentNotNull === 1)) {
+        if (newNotNull) {
+          // Agregar restricción NOT NULL
+          DB.run(`ALTER TABLE "${CURRENT_TABLE}" ALTER COLUMN "${fieldName}" SET NOT NULL;`);
+        } else {
+          // Eliminar restricción NOT NULL
+          DB.run(`ALTER TABLE "${CURRENT_TABLE}" ALTER COLUMN "${fieldName}" DROP NOT NULL;`);
+        }
+      }
+      
+      alert(`✅ Column "${fieldName}" successfully updated`);
+      renderExistingFieldsFromTable();
+      
+    } catch (err) {
+      alert('Error while updating column: ' + err.message + '\n\nSome operations may require recreating the table.');
+      console.error(err);
+    }
+  }
+
+  // Renombrar columna
+  function renameColumn(tableName, oldName, newName) {
+    if (!newName.trim()) {
+      alert('The new name cannot be empty');
+      return;
+    }
+    
+    try {
+      DB.run(`ALTER TABLE "${tableName}" RENAME COLUMN "${oldName}" TO "${newName}";`);
+      alert(`✅ Column renamed from "${oldName}" to "${newName}"`);
+      renderExistingFieldsFromTable();
+    } catch (err) {
+      alert('Error while renaming column: ' + err.message);
+    }
+  }
+
+  // Eliminar columna (ya funciona)
+  function deleteColumn(tableName, columnName) {
+    try {
+      DB.run(`ALTER TABLE "${tableName}" DROP COLUMN "${columnName}";`);
+      alert(`✅ Column "${columnName}" deleted successfully`);
+      renderExistingFieldsFromTable();
+    } catch (err) {
+      alert('Error while deleting column:\n' + err.message + '\n\nMake sure you are using sql.js >=1.8.');
+    }
+  }
+
+  // Recargar estructura de campos existentes
+  function renderExistingFieldsFromTable() {
+    const schemaRes = DB.exec(`PRAGMA table_info("${CURRENT_TABLE}");`);
+    
+    if (schemaRes && schemaRes[0] && schemaRes[0].values) {
+      const fields = schemaRes[0].values.map(row => ({
+        cid: row[0],
+        name: row[1],
+        type: row[2],
+        notnull: row[3],
+        dflt_value: row[4],
+        pk: row[5]
+      }));
+      
+      renderExistingFields(fields);
+      renderData(); // Actualizar vista de datos
+    }
+  }
+
+  // Agregar nueva fila para campo nuevo
+  function addFieldRowForEdit() {
+    const fieldHtml = `
+      <div class="field-row d-flex flex-wrap align-items-end gap-2 mb-2 p-2 border rounded bg-light">
+        <input type="text" class="form-control fieldName" placeholder="name" style="flex:2; min-width:120px;">
+        <select class="form-control fieldType mx-1" style="flex:1; min-width:100px;">
+          <option value="TEXT">TEXT</option>
+          <option value="INTEGER">INTEGER</option>
+          <option value="REAL">REAL</option>
+          <option value="BLOB">BLOB</option>
+        </select>
+        <input type="text" class="form-control defaultValue mx-1" placeholder="DEFAULT" style="flex:1; min-width:100px;">
+        <div class="form-check mx-1" title="NOT NULL">
+          <input class="form-check-input isNotNull" type="checkbox">
+          <label class="form-check-label">NN</label>
+        </div>
+        <div class="form-check mx-1" title="PRIMARY KEY">
+          <input class="form-check-input isPK" type="checkbox">
+          <label class="form-check-label">PK</label>
+        </div>
+        <div class="form-check mx-1" title="UNIQUE">
+          <input class="form-check-input isUnique" type="checkbox">
+          <label class="form-check-label">UQ</label>
+        </div>
+        <div class="form-check mx-2" title="AUTOINCREMENT (solo INTEGER PK)">
+          <input class="form-check-input isAutoinc" type="checkbox" disabled>
+          <label class="form-check-label">AI</label>
+        </div>        
+        <button type="button" class="btn btn-sm btn-danger removeField fas fa-times"></button>
+      </div>
+    `;
+    
+    const $newRow = $(fieldHtml);
+    $('#newFieldsContainer').append($newRow);
+    
+    // Evento para eliminar campo
+    $newRow.find('.removeField').on('click', function() {
+      $(this).closest('.field-row').remove();
+    });
+    
+    // Evento para validar checkboxes
+    $newRow.on('change', '.isPK, .isUnique, .isNotNull, .fieldType', function() {
+      const $row = $(this).closest('.field-row');
+      validateFieldRow($row);
+    });
+    
+    validateFieldRow($newRow);
+  }
+
+  // Guardar cambios (agregar nuevas columnas)
+  function saveEditTable() {
+    if (!CURRENT_TABLE) {
+      alert('No table selected');
+      return;
+    }
+
+    const newFields = [];
+    $('#newFieldsContainer .field-row').each(function() {
+      const $row = $(this);
+      const name = $row.find('.fieldName').val().trim();
+      const type = $row.find('.fieldType').val();
+      const isPK = $row.find('.isPK').prop('checked');
+      const isUnique = $row.find('.isUnique').prop('checked');
+      const isNotNull = $row.find('.isNotNull').prop('checked');
+      const isAI = $row.find('.isAutoinc').prop('checked');
+      const def = $row.find('.defaultValue').val().trim();
+
+      if (!name) return;
+
+      // Verificar si el campo ya existe
+      const schemaRes = DB.exec(`PRAGMA table_info("${CURRENT_TABLE}");`);
+      const existingFields = schemaRes[0].values.map(row => row[1]);
+      
+      if (existingFields.includes(name)) {
+        alert(`The field "${name}" already exists in the table`);
+        return;
+      }
+
+      // Construir definición
+      let colDef = `"${name}" ${type}`;
+      
+      if (isPK) {
+        colDef += " PRIMARY KEY";
+        if (isAI && type === 'INTEGER') {
+          colDef += " AUTOINCREMENT";
+        }
+      } else {
+        if (isUnique) colDef += " UNIQUE";
+        if (isNotNull) colDef += " NOT NULL";
+      }
+      
+      if (def) {
+        colDef += ` DEFAULT ${processDefaultValue(def, type)}`;
+      }
+
+      newFields.push({ name, definition: colDef });
+    });
+
+    if (newFields.length === 0) {
+      $('#overlay').hide();
+      return;
+    }
+
+    try {
+      // Agregar cada nueva columna
+      newFields.forEach(field => {
+        DB.run(`ALTER TABLE "${CURRENT_TABLE}" ADD COLUMN ${field.definition};`);
+      });
+      
+      alert(`✅ ${newFields.length} field(s) added successfully`);
+      renderExistingFieldsFromTable();
+      $('#overlay').hide();
+      
+    } catch (err) {
+      alert('Error while adding fields: ' + err.message);
+    }
+  }
+
+
+
+
+  // === EJECUTAR CONSULTA SQL ===
+  function executeSQLQuery() {
+    const query = $('#sqlQuery').val().trim();
+    
+    if (!query) {
+      document.getElementById("queryResults").innerHTML = '<div class="alert alert-danger mb-0">Please enter a SQL query.</div>';
+      return;
+    }
+    
+    if (!DB) {
+      document.getElementById("queryResults").innerHTML = '<div class="alert alert-danger mb-0">No database loaded.</div>';
+      return;
+    }
+    
+    $('#queryResults').html('<div class="alert alert-info">Executing query...</div>');
+    
+    try {
+      // Ejecutar la consulta
+      const result = DB.exec(query);
+      
+      // Determinar si es una consulta SELECT o de otro tipo
+      const isSelect = query.toUpperCase().trim().startsWith('SELECT');
+      
+      if (isSelect) {
+        displaySelectResults(result);
+      } else {
+        displayNonQueryResults(result, query);
+        loadTables(); // Recargar lista de tablas por si hubo cambios
+      }
+      
+    } catch (err) {
+      displayQueryError(err, query);
+    }
+  }
+
+  // Mostrar resultados de SELECT
+  function displaySelectResults(result) {
+    if (!result || result.length === 0) {
+      $('#queryResults').html(`
+        <div class="alert alert-warning">
+          <i class="fas fa-info-circle mr-2"></i>
+          The query returned no results.
+        </div>
+      `);
+      return;
+    }
+    
+    // Verificar si hay datos
+    let hasData = false;
+    for (const res of result) {
+      if (res.values && res.values.length > 0) {
+        hasData = true;
+        break;
+      }
+    }
+    
+    if (!hasData) {
+      $('#queryResults').html(`
+        <div class="alert alert-warning">
+          <i class="fas fa-info-circle mr-2"></i>
+          The query returned no data.
+        </div>
+      `);
+      return;
+    }
+    
+    // Procesar el primer resultado (asumimos una sola consulta SELECT)
+    const firstResult = result[0];
+    const columns = firstResult.columns || [];
+    const rows = firstResult.values || [];
+    
+    if (columns.length === 0) {
+      $('#queryResults').html(`
+        <div class="alert alert-warning">
+          <i class="fas fa-info-circle mr-2"></i>
+          No columns found in the result.
+        </div>
+      `);
+      return;
+    }
+    
+    // Crear tabla con Clusterize
+    let tableHtml = `
+      <div class="table-responsive">
+        <table class="table table-bordered table-sm table-striped">
+          <thead class="thead-light">
+            <tr id="queryResultHeader"></tr>
+          </thead>
+          <tbody id="queryResultBody"></tbody>
+        </table>
+      </div>
+      <div class="mt-2 text-muted">
+        <i class="fas fa-database mr-1"></i>
+        ${rows.length} row(s) returned
+      </div>
+    `;
+    
+    $('#queryResults').html(tableHtml);
+    
+    // Crear encabezados
+    let headerHtml = '';
+    columns.forEach(col => {
+      headerHtml += `<th>${escapeHtml(col)}</th>`;
+    });
+    $('#queryResultHeader').html(headerHtml);
+    
+    // Crear filas con Clusterize
+    const items = rows.map(row => {
+      let cells = row.map(cell => {
+        if (cell === null) {
+          return '<td class="text-muted"><em>NULL</em></td>';
+        } else if (typeof cell === 'object' && cell instanceof Uint8Array) {
+          // Datos BLOB
+          return `<td><span class="badge badge-secondary">BLOB (${cell.length} bytes)</span></td>`;
+        } else {
+          return `<td>${escapeHtml(String(cell))}</td>`;
+        }
+      });
+      return '<tr>' + cells.join('') + '</tr>';
+    });
+    
+    // Limpiar Clusterize anterior
+    if (window.queryResultClusterize) {
+      window.queryResultClusterize.destroy();
+      window.queryResultClusterize = null;
+    }
+    
+    // Inicializar Clusterize
+    window.queryResultClusterize = new Clusterize({
+      rows: items,
+      scrollId: 'queryResultBody',
+      contentId: 'queryResultBody',
+      tag: 'tbody'
+    });
+  }
+
+  // Mostrar resultados de consultas no SELECT (INSERT, UPDATE, DELETE, etc.)
+  function displayNonQueryResults(result, query) {
+    // Obtener número de filas afectadas
+    const changesResult = DB.exec('SELECT changes() as affected');
+    const affectedRows = changesResult[0].values[0][0];
+    
+    // Determinar tipo de operación
+    let operationType = 'Operación';
+    if (query.toUpperCase().startsWith('INSERT')) {
+      operationType = 'INSERT';
+    } else if (query.toUpperCase().startsWith('UPDATE')) {
+      operationType = 'UPDATE';
+    } else if (query.toUpperCase().startsWith('DELETE')) {
+      operationType = 'DELETE';
+    } else if (query.toUpperCase().startsWith('CREATE')) {
+      operationType = 'CREATE';
+    } else if (query.toUpperCase().startsWith('DROP')) {
+      operationType = 'DROP';
+    } else if (query.toUpperCase().startsWith('ALTER')) {
+      operationType = 'ALTER';
+    }
+    
+    let html = `
+      <div class="alert alert-success">
+        <h5><i class="fas fa-check-circle mr-2"></i>Query executed successfully</h5>
+        <hr>
+        <div class="row">
+          <div class="col-md-6">
+            <p><strong>Type:</strong> ${operationType}</p>
+            <p><strong>Affected rows:</strong> ${affectedRows}</p>
+          </div>
+          <div class="col-md-6">
+            <p><strong>Query:</strong></p>
+            <pre class="bg-light p-2 rounded" style="font-size: 0.85rem; max-height: 100px; overflow-y: auto;">${escapeHtml(query)}</pre>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    // Si hay resultados (por ejemplo, de una consulta con RETURNING)
+    if (result && result.length > 0 && result[0].values && result[0].values.length > 0) {
+      html += `
+        <div class="mt-3">
+          <h6><i class="fas fa-table mr-2"></i>Additional Results:</h6>
+          <div class="table-responsive">
+            <table class="table table-bordered table-sm table-striped">
+              <thead class="thead-light">
+                <tr>
+                  ${result[0].columns.map(col => `<th>${escapeHtml(col)}</th>`).join('')}
+                </tr>
+              </thead>
+              <tbody>
+                ${result[0].values.map(row => 
+                  `<tr>${row.map(cell => 
+                    `<td>${cell === null ? '<em class="text-muted">NULL</em>' : escapeHtml(String(cell))}</td>`
+                  ).join('')}</tr>`
+                ).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+    
+    $('#queryResults').html(html);
+  }
+
+  // Mostrar error de consulta
+  function displayQueryError(err, query) {
+    let errorMessage = err.message || String(err);
+    
+    // Intentar dar un mensaje más amigable
+    if (errorMessage.includes('syntax error')) {
+      errorMessage = 'SQL query syntax error';
+    } else if (errorMessage.includes('no such table')) {
+      errorMessage = 'The specified table does not exist';
+    } else if (errorMessage.includes('no such column')) {
+      errorMessage = 'The specified column does not exist';
+    } else if (errorMessage.includes('constraint failed')) {
+      errorMessage = 'Constraint violation (PRIMARY KEY, UNIQUE, FOREIGN KEY, etc.)';
+    }
+    
+    const html = `
+      <div class="alert alert-danger">
+        <h5><i class="fas fa-exclamation-triangle mr-2"></i>Error executing query</h5>
+        <hr>
+        <p class="mb-2"><strong>Message:</strong> ${escapeHtml(errorMessage)}</p>
+        <hr>
+        <p class="mb-2"><strong>Query:</strong></p>
+        <pre class="bg-dark text-white p-3 rounded" style="font-size: 0.85rem; max-height: 150px; overflow-y: auto;">${escapeHtml(query)}</pre>
+      </div>
+    `;
+    
+    $('#queryResults').html(html);
+    
+    console.error('SQL Error:', err);
+  }
+
+  
+  //manejo TRIGGERS
+  function loadTriggers() {
+    if (!CURRENT_TABLE || !DB) return;
+    
+    try {
+      // Obtener triggers de la tabla actual
+      const result = DB.exec(`
+        SELECT name, sql 
+        FROM sqlite_master 
+        WHERE type='trigger' 
+        AND tbl_name = '${CURRENT_TABLE}'
+        ORDER BY name;
+      `);
+      
+      const $list = $('#triggerList');
+      $list.empty();
+      
+      if (!result || !result[0] || !result[0].values || result[0].values.length === 0) {
+        $list.html('<li class="list-group-item text-muted">No hay triggers definidos</li>');
+        return;
+      }
+      
+      const triggers = result[0].values;
+      
+      triggers.forEach(trigger => {
+        const name = trigger[0];
+        const sql = trigger[1];
+        
+        const $li = $(`
+          <li class="list-group-item">
+            <div class="d-flex justify-content-between align-items-center">
+              <div>
+                <strong>${escapeHtml(name)}</strong>
+                <button class="btn btn-sm btn-link p-0 ml-2 view-trigger" data-name="${escapeHtml(name)}" data-sql="${escapeHtml(sql)}">
+                  <i class="fas fa-eye"></i> Ver SQL
+                </button>
+              </div>
+              <div>
+                <button class="btn btn-sm btn-danger delete-trigger" data-name="${escapeHtml(name)}">
+                  <i class="fas fa-trash"></i>
+                </button>
+              </div>
+            </div>
+          </li>
+        `);
+        
+        $list.append($li);
+      });
+      
+      // Eventos
+      $('.view-trigger').off('click').on('click', function() {
+        const name = $(this).data('name');
+        const sql = $(this).data('sql');
+        viewTriggerSQL(name, sql);
+      });
+      
+      $('.delete-trigger').off('click').on('click', function() {
+        const name = $(this).data('name');
+        deleteTrigger(name);
+      });
+      
+    } catch (err) {
+      console.error('Error al cargar triggers:', err);
+    }
+  }
+
+  function openCreateTriggerOverlay(triggerName = null, triggerSQL = null) {
+    if (!DB) {
+      document.getElementById("triggerList").innerHTML = '<div class="alert alert-danger mb-0">No database loaded.</div>';
+      return;
+    }
+    overlayMode = 'create-trigger';
+    
+    const $form = $('#recordForm');
+    const $title = $('#overlay-title');
+    
+    if (triggerName) {
+      $title.text(`Edit Trigger: ${triggerName}`);
+    } else {
+      $title.text('Create New Trigger');
+    }
+    
+    // Obtener columnas de la tabla actual
+    const schemaRes = DB.exec(`PRAGMA table_info("${CURRENT_TABLE}");`);
+    const columns = schemaRes[0].values.map(row => row[1]);
+    
+    let formHtml = `
+      <div class="alert alert-info mb-3">
+        <strong>💡 What is a Trigger?</strong><br>
+        A trigger is an automatic procedure that runs when an event (INSERT, UPDATE, DELETE) occurs in a table.
+      </div>
+      
+      ${triggerName ? `<input type="hidden" id="editTriggerName" value="${escapeHtml(triggerName)}">` : ''}
+      
+      <div class="form-group">
+        <label>Trigger Name</label>
+        <input type="text" class="form-control" id="triggerName" value="${triggerName || ''}" ${triggerName ? 'readonly' : ''} placeholder="ej. before_insert_usuario">
+      </div>
+      
+      <div class="form-group">
+        <label>Execution Time</label>
+        <select class="form-control" id="triggerTime">
+          <option value="BEFORE">BEFORE (Before the event)</option>
+          <option value="AFTER" ${triggerName && triggerSQL && triggerSQL.includes('AFTER') ? 'selected' : ''}>AFTER (After the event)</option>
+          <option value="INSTEAD OF" ${triggerName && triggerSQL && triggerSQL.includes('INSTEAD OF') ? 'selected' : ''}>INSTEAD OF (Instead of the event)</option>
+        </select>
+      </div>
+      
+      <div class="form-group">
+        <label>Event</label>
+        <select class="form-control" id="triggerEvent">
+          <option value="INSERT">INSERT (When inserting)</option>
+          <option value="UPDATE" ${triggerName && triggerSQL && triggerSQL.includes('UPDATE') ? 'selected' : ''}>UPDATE (When updating)</option>
+          <option value="DELETE" ${triggerName && triggerSQL && triggerSQL.includes('DELETE') ? 'selected' : ''}>DELETE (When removing)</option>
+        </select>
+      </div>
+      
+      <div class="form-group" id="triggerColumnsContainer" style="display: none;">
+        <label>Columns to monitor (only for UPDATE)</label>
+        <div id="triggerColumnsCheckboxes">
+          ${columns.map(col => `
+            <div class="form-check">
+              <input class="form-check-input trigger-column" type="checkbox" value="${col}" id="col_${col}">
+              <label class="form-check-label" for="col_${col}">${col}</label>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <label>Trigger Actions (SQL)</label>
+        <textarea class="form-control" id="triggerActions" rows="8" placeholder="Write the SQL actions here...">${triggerSQL ? extractTriggerBody(triggerSQL) : ''}</textarea>
+        <small class="form-text text-muted">
+          Use NEW.column to access new values, OLD.column to access old values
+        </small>
+      </div>
+      
+      <div class="alert alert-warning">
+        <strong>⚠️ Cuidado:</strong> Triggers can cause unexpected effects if they are not designed correctly.
+      </div>
+    `;
+    
+    $form.html(formHtml);
+    
+    // Mostrar/Ocultar columnas según evento
+    $('#triggerEvent').off('change').on('change', function() {
+      if ($(this).val() === 'UPDATE') {
+        $('#triggerColumnsContainer').show();
+      } else {
+        $('#triggerColumnsContainer').hide();
+      }
+    });
+    
+    // Disparar evento inicial
+    if (triggerName && triggerSQL && triggerSQL.includes('UPDATE')) {
+      $('#triggerColumnsContainer').show();
+      // Marcar columnas si existen en el SQL
+      const match = triggerSQL.match(/UPDATE OF (.+?) ON/i);
+      if (match) {
+        const cols = match[1].split(',').map(c => c.trim());
+        $('.trigger-column').each(function() {
+          if (cols.includes($(this).val())) {
+            $(this).prop('checked', true);
+          }
+        });
+      }
+    }
+    
+    $('#overlay').show();
+  }
+
+  // Extraer cuerpo del trigger (entre BEGIN y END)
+  function extractTriggerBody(sql) {
+    const match = sql.match(/BEGIN\s+(.+?)\s+END/si);
+    return match ? match[1].trim() : '';
+  }
+
+  function saveTrigger() {
+    const triggerName = $('#triggerName').val().trim();
+    const triggerTime = $('#triggerTime').val();
+    const triggerEvent = $('#triggerEvent').val();
+    const triggerActions = $('#triggerActions').val().trim();
+    
+    if (!triggerName) {
+      alert('The trigger name is required');
+      return;
+    }
+    
+    if (!triggerActions) {
+      alert('The trigger actions are required');
+      return;
+    }
+    
+    // Construir SQL del trigger
+    let sql = `CREATE TRIGGER "${triggerName}"\n`;
+    sql += `${triggerTime} ${triggerEvent} ON "${CURRENT_TABLE}"\n`;
+    
+    // Columnas para UPDATE OF
+    if (triggerEvent === 'UPDATE') {
+      const selectedColumns = $('.trigger-column:checked').map(function() {
+        return $(this).val();
+      }).get();
+      
+      if (selectedColumns.length > 0) {
+        sql += `OF ${selectedColumns.join(', ')}\n`;
+      }
+    }
+    
+    sql += `BEGIN\n`;
+    sql += `${triggerActions}\n`;
+    sql += `END;`;
+    
+    try {
+      DB.run(sql);
+      alert(`✅ Trigger "${triggerName}" created successfully`);
+      loadTriggers();
+      $('#overlay').hide();
+    } catch (err) {
+      alert(`❌ Error creating trigger:\n${err.message}\n\nSQL:\n${sql}`);
+      console.error('Trigger error:', err);
+    }
+  }
+
+  function viewTriggerSQL(name, sql) {
+    const html = `
+      <div class="modal" id="viewTriggerModal" tabindex="-1" style="display: block; background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Trigger: ${escapeHtml(name)}</h5>
+              <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+              <pre class="bg-light p-3 rounded" style="font-size: 0.9rem; max-height: 400px; overflow-y: auto; white-space: pre-wrap;">${escapeHtml(sql)}</pre>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    $('body').append(html);
+    
+    $('[data-dismiss="modal"]').on('click', function() {
+      $('#viewTriggerModal').remove();
+    });
+  }
+
+  function deleteTrigger(name) {
+    if (!confirm(`Remove the trigger "${name}"?\nThis action cannot be undone.`)) {
+      return;
+    }
+    
+    try {
+      DB.run(`DROP TRIGGER "${name}";`);
+      alert(`✅ Trigger "${name}" deleted successfully`);
+      loadTriggers();
+    } catch (err) {
+      alert(`❌ Error deleting trigger: ${err.message}`);
+    }
+  }
+
+
+  // Abrir overlay con opciones de plantillas
+  function openCreateDatabaseOverlayWithTemplates() {
+    overlayMode = 'create-database';
+    const $form = $('#recordForm');
+    const $title = $('#overlay-title');
+    
+    $title.text('Create New Database');
+    
+    let formHtml = `
+      <div class="alert alert-info mb-3">
+        <strong>💡 Information:</strong><br>
+        • The database will be created <strong>IN MEMORY</strong><br>
+        • The data will be lost when the page is closed or reloaded.<br>
+        • Use the "Download" button to save your changes
+      </div>
+      
+      <div class="form-group">
+        <label>Select a template:</label>
+        
+        <div class="list-group mb-3">
+          <a href="#" class="list-group-item list-group-item-action template-option active" data-template="empty">
+            <div class="d-flex w-100 justify-content-between">
+              <h6 class="mb-1"><i class="fas fa-folder mr-2"></i>Empty Database</h6>
+            </div>
+            <p class="mb-1">Start from scratch without predefined tables</p>
+          </a>
+          
+          <a href="#" class="list-group-item list-group-item-action template-option" data-template="users">
+            <div class="d-flex w-100 justify-content-between">
+              <h6 class="mb-1"><i class="fas fa-users mr-2"></i>Template: Users</h6>
+            </div>
+            <p class="mb-1">Users table with basic fields</p>
+          </a>
+          
+          <a href="#" class="list-group-item list-group-item-action template-option" data-template="blog">
+            <div class="d-flex w-100 justify-content-between">
+              <h6 class="mb-1"><i class="fas fa-newspaper mr-2"></i>Template: Blog</h6>
+            </div>
+            <p class="mb-1">Tables for posts and comments</p>
+          </a>
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <label for="newDatabaseName">Database Name</label>
+        <input type="text" class="form-control" id="newDatabaseName" 
+              placeholder="ej. my_database" 
+              value="my_database">
+      </div>
+    `;
+    
+    $form.html(formHtml);
+    
+    // Evento para seleccionar plantilla
+    $('.template-option').off('click').on('click', function(e) {
+      e.preventDefault();
+      $('.template-option').removeClass('active');
+      $(this).addClass('active');
+    });
+    
+    // Evento para el campo de nombre
+    $('#newDatabaseName').off('input').on('input', function() {
+      validateDatabaseName($(this));
+    });
+    
+    $('#overlay').show();
+    
+    setTimeout(() => {
+      $('#newDatabaseName').focus();
+    }, 100);
+  }
+
+  // Crear base de datos con plantilla
+  function saveCreateDatabaseWithTemplate() {
+    const dbName = $('#newDatabaseName').val().trim();
+    const template = $('.template-option.active').data('template');
+    
+    // Validaciones (igual que antes)
+    if (dbName === '') {
+      alert('❌ The name cannot be empty.');
+      return;
+    }
+    
+    if (!/^[a-zA-Z0-9_\-\s]+$/.test(dbName)) {
+      alert('❌ The name can only contain letters, numbers, underscores, hyphens and spaces');
+      return;
+    }
+    
+    if (dbName.length > 100 || dbName.length < 3) {
+      alert('❌ The name must be between 3 and 100 characters');
+      return;
+    }
+    
+    // Verificar si ya hay BD abierta
+    if (DB) {
+      const confirmClose = confirm(
+        `⚠️ There is already an open database: "${DBNAME}"\n\n` +
+        `Do you want to close it and create a new one?\n` +
+        `Any unsaved changes will be lost.`
+      );
+      
+      if (!confirmClose) return;
+      
+      if (DB.close) DB.close();
+    }
+    
+    try {
+      // Crear BD
+      DB = new SQL.Database();
+      DBNAME = dbName;
+      CURRENT_TABLE = null;
+      
+      // Aplicar plantilla si corresponde
+      if (template !== 'empty') {
+        applyTemplate(template);
+      }
+      loadTables();
+      $('#overlay').hide();      
+    } catch (err) {
+      alert(`❌ Error creating database:\n${err.message}`);
+    }
+  }
+
+  // Aplicar plantilla
+  function applyTemplate(templateName) {
+    const templates = {
+      users: [
+        {
+          name: 'users',
+          columns: [
+            { name: 'id', type: 'INTEGER', pk: true, autoinc: true },
+            { name: 'name', type: 'TEXT', notnull: true },
+            { name: 'email', type: 'TEXT', unique: true },
+            { name: 'age', type: 'INTEGER' },
+            { name: 'created_at', type: 'TEXT', default: 'CURRENT_TIMESTAMP' }
+          ]
+        }
+      ],
+      blog: [
+        {
+          name: 'posts',
+          columns: [
+            { name: 'id', type: 'INTEGER', pk: true, autoinc: true },
+            { name: 'title', type: 'TEXT', notnull: true },
+            { name: 'content', type: 'TEXT', notnull: true },
+            { name: 'author_id', type: 'INTEGER', notnull: true },
+            { name: 'published', type: 'INTEGER', default: '0' },
+            { name: 'date', type: 'TEXT', default: 'CURRENT_TIMESTAMP' }
+          ]
+        },
+        {
+          name: 'comments',
+          columns: [
+            { name: 'id', type: 'INTEGER', pk: true, autoinc: true },
+            { name: 'post_id', type: 'INTEGER', notnull: true },
+            { name: 'author', type: 'TEXT', notnull: true },
+            { name: 'text', type: 'TEXT', notnull: true },
+            { name: 'date', type: 'TEXT', default: 'CURRENT_TIMESTAMP' }
+          ]
+        }
+      ]
+    };
+    
+    const tables = templates[templateName];
+    
+    if (tables) {
+      tables.forEach(table => {
+        const columns = table.columns.map(col => {
+          let def = `"${col.name}" ${col.type}`;
+          if (col.pk) def += ' PRIMARY KEY';
+          if (col.autoinc && col.type === 'INTEGER') def += ' AUTOINCREMENT';
+          if (col.unique) def += ' UNIQUE';
+          if (col.notnull) def += ' NOT NULL';
+          if (col.default) def += ` DEFAULT ${col.default}`;
+          return def;
+        });
+        
+        const sql = `CREATE TABLE "${table.name}" (${columns.join(', ')});`;
+        DB.run(sql);
+      });
+    }
+  }
+
+  function validateDatabaseName($input) {
+    const name = $input.val().trim();
+    const $saveBtn = $('#overlaySave');
+    
+    // Limpiar clases de validación
+    $input.removeClass('is-valid is-invalid');
+    $input.next('.invalid-feedback').remove();
+    
+    if (name === '') {
+      $saveBtn.prop('disabled', true);
+      return;
+    }
+    
+    // Validar caracteres
+    if (!/^[a-zA-Z0-9_\-\s]+$/.test(name)) {
+      $input.addClass('is-invalid');
+      $input.after('<div class="invalid-feedback d-block">Only letters, numbers, underscores, hyphens, and spaces</div>');
+      $saveBtn.prop('disabled', true);
+      return;
+    }
+    
+    // Validar longitud
+    if (name.length > 100) {
+      $input.addClass('is-invalid');
+      $input.after('<div class="invalid-feedback d-block">Maximum 100 characters</div>');
+      $saveBtn.prop('disabled', true);
+      return;
+    }
+    
+    // Validar longitud mínima
+    if (name.length < 3) {
+      $input.addClass('is-invalid');
+      $input.after('<div class="invalid-feedback d-block">Minimum 3 characters</div>');
+      $saveBtn.prop('disabled', true);
+      return;
+    }
+    
+    // Nombre válido
+    $input.addClass('is-valid');
+    $saveBtn.prop('disabled', false);
+  }
+
+  function downloadDatabase() {
+    if (!DB) {
+      alert("No database is loaded.");
+      return;
+    }
+    try {
+      const data = DB.export();
+      const blob = new Blob([data], { type: "application/octet-stream" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = DBNAME ? `${DBNAME}.sqlite` : 'database.sqlite';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 100);
+    } catch (err) {
+      alert('Error exporting database: ' + err.message);
+    }
+  }
+
+
+  // === OVERLAY FUNCIONES COMUNES ===
+  function hideOverlay() {
+    $('#overlay').hide();
+    $('#recordForm').html(''); // Limpiar formulario
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+      // Seleccionar todos los enlaces de los tabs
+      var tabLinks = document.querySelectorAll('#tablaTabs a[data-toggle="tab"]');
+      // Agregar evento click a cada tab
+      tabLinks.forEach(function(tabLink) {
+          tabLink.addEventListener('click', function(e) {
+              e.preventDefault();
+              // Remover clase 'active' de todos los tabs
+              tabLinks.forEach(function(link) {
+                  link.classList.remove('active');
+              });
+              // Agregar clase 'active' al tab clickeado
+              this.classList.add('active');
+              // Ocultar todos los paneles
+              var tabPanes = document.querySelectorAll('.tab-pane');
+              tabPanes.forEach(function(pane) {
+                  pane.classList.remove('show', 'active');
+              });
+              // Mostrar el panel correspondiente
+              var targetId = this.getAttribute('href');
+              var targetPane = document.querySelector(targetId);
+              targetPane.classList.add('show', 'active');
+          });
+      });
+      $('#tableList').on('click', 'li.list-group-item', function() {
+          $(this).addClass('selected').siblings().removeClass('selected');
+      });
+  });
+
+  
+</script>
+</body>
+</html>
