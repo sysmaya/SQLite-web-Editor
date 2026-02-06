@@ -18,7 +18,7 @@ Your data **never leaves your computer**.
 
 ---
 
-![Web SQLite Editor Screenshot](./images/screenshot.png)
+![Web SQLite Editor Screenshot](structure.png)
 
 ## 🔐 Security & Privacy
 
