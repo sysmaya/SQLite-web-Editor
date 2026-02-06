@@ -69,6 +69,6 @@ There is **nothing to install**.
 Just clone the repository and open `index.html`:
 
 ```bash
-git clone https://github.com/your-username/web-sqlite-editor.git
+git clone https://github.com/sysmaya/SQLite-web-Editor.git
 cd web-sqlite-editor
 
