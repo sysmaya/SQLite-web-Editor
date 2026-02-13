@@ -68,7 +68,7 @@ Databases can be:
 
 There is **nothing to install**.
 
-Just clone the repository and open `index.html`:
+Just clone the repository and open `sqlite_editor.html`:
 
 ```bash
 git clone https://github.com/sysmaya/SQLite-web-Editor.git
